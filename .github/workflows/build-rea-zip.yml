@@ -153,16 +153,53 @@ jobs:
         run: |
           set -euo pipefail
           find bundle -name .git -prune -exec rm -rf {} +
-          zip -qr -1 rea-ecossistema-completo.zip bundle
           python3 - <<'PY'
+          import os
+          import stat
+          import time
           import zipfile
 
           archive = "rea-ecossistema-completo.zip"
-          with zipfile.ZipFile(archive) as zf:
+          written = 0
+
+          def add_symlink(zf, path, arcname):
+              st = os.lstat(path)
+              dt = time.localtime(st.st_mtime)[:6]
+              dt = (max(dt[0], 1980), *dt[1:])
+              info = zipfile.ZipInfo(arcname, date_time=dt)
+              info.create_system = 3
+              info.external_attr = (stat.S_IFLNK | 0o777) << 16
+              zf.writestr(info, os.readlink(path).encode("utf-8", "surrogateescape"),
+                          compress_type=zipfile.ZIP_DEFLATED, compresslevel=1)
+
+          # Python's ZIP64 writer handles archives with large central directories
+          # and preserves symbolic links without relying on Info-ZIP's ZIP64 index.
+          with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED,
+                               compresslevel=1, allowZip64=True) as zf:
+              for root, dirs, files in os.walk("bundle", followlinks=False):
+                  dirs.sort()
+                  for dirname in list(dirs):
+                      path = os.path.join(root, dirname)
+                      if os.path.islink(path):
+                          add_symlink(zf, path, path.replace(os.sep, "/"))
+                          dirs.remove(dirname)
+                          written += 1
+                  for filename in sorted(files):
+                      path = os.path.join(root, filename)
+                      arcname = path.replace(os.sep, "/")
+                      if os.path.islink(path):
+                          add_symlink(zf, path, arcname)
+                      else:
+                          zf.write(path, arcname, compress_type=zipfile.ZIP_DEFLATED,
+                                   compresslevel=1)
+                      written += 1
+
+          with zipfile.ZipFile(archive, "r", allowZip64=True) as zf:
               bad_member = zf.testzip()
               if bad_member is not None:
                   raise SystemExit(f"ZIP integrity test failed at: {bad_member}")
-              print(f"ZIP integrity OK: {len(zf.infolist())} entries checked")
+              print(f"ZIP64 integrity OK: {len(zf.infolist())} entries checked")
+          print(f"Created {archive}; entries written: {written}")
           PY
           du -sh bundle rea-ecossistema-completo.zip
           echo "=== Clone summary ==="
