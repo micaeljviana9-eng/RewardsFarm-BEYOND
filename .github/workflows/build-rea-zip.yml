@@ -1,0 +1,40 @@
+name: Build complete REA ZIP
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/build-rea-zip.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package REA and its submodules
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout downloader repository
+        uses: actions/checkout@v4
+
+      - name: Clone REA with its pinned submodules
+        run: |
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/morluto/rea.git rea
+          git -C rea submodule status --recursive
+
+      - name: Create ZIP without Git metadata
+        run: |
+          find rea -depth -name .git -exec rm -rf {} +
+          zip -qr rea-completo.zip rea
+          ls -lh rea-completo.zip
+
+      - name: Upload ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rea-completo
+          path: rea-completo.zip
+          if-no-files-found: error
+          retention-days: 7
