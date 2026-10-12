@@ -25,16 +25,19 @@ jobs:
           git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/morluto/rea.git rea
           git -C rea submodule status --recursive
 
-      - name: Create ZIP without Git metadata
+      - name: Remove Git metadata and prepare artifact
         run: |
-          find rea -depth -name .git -exec rm -rf {} +
-          zip -qr rea-completo.zip rea
-          ls -lh rea-completo.zip
+          find rea -name .git -prune -exec rm -rf {} +
+          mkdir -p artifact
+          mv rea artifact/rea
+          du -sh artifact/rea
+          find artifact/rea -maxdepth 2 -type d | sort | head -80
 
-      - name: Upload ZIP artifact
+      - name: Upload complete source as a ZIP artifact
         uses: actions/upload-artifact@v4
         with:
           name: rea-completo
-          path: rea-completo.zip
+          path: artifact/**
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
