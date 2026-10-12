@@ -1,4 +1,4 @@
-name: Build complete REA ZIP
+name: Build REA ecosystem bundle
 
 on:
   workflow_dispatch:
@@ -13,30 +13,161 @@ permissions:
 
 jobs:
   package:
-    name: Package REA and its submodules
+    name: Download REA and related reverse-engineering projects
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120
     steps:
-      - name: Checkout downloader repository
+      - name: Checkout bundle workflow
         uses: actions/checkout@v4
 
-      - name: Clone REA with its pinned submodules
+      - name: Prepare folders and catalog
+        shell: bash
         run: |
-          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/morluto/rea.git rea
-          git -C rea submodule status --recursive
+          set -euo pipefail
+          mkdir -p bundle/original bundle/projects bundle/reports /tmp/rea-ecosystem-logs
+          cat > bundle/CATALOG.md <<'EOF'
+          # REA ecosystem source bundle
 
-      - name: Create ZIP without Git metadata
+          Research snapshot: 2026-10-12. This bundle groups the original REA project, distinct AI-agent/MCP alternatives, and major source-level reverse-engineering engines. It is a curated, broad search—not a guarantee that every repository on GitHub has been found. Repositories are shallow-cloned from their default branches; submodules are requested recursively where available. Nothing is compiled or executed.
+
+          ## Original project
+          - [morluto/rea](https://github.com/morluto/rea) — unified MCP/CLI agent workflows for native binaries, applications, JavaScript/Electron, .NET and runtime investigation. MIT.
+            - Its `third_party` submodules already include `1013503897/jadx-headless-mcp`, `ReFirmLabs/binwalk`, `onekey-sec/unblob`, `Washi1337/ghidra-nativeaot`, and `pionxzh/wakaru`; those are included within `original/rea/third_party` rather than duplicated as separate top-level copies.
+
+          ## Agent platforms, MCP bridges and AI-assisted analysis
+          - [LING71671/open-reverselab](https://github.com/LING71671/open-reverselab) — multi-tool AI reverse-engineering lab and MCP server covering Ghidra, Frida, x64dbg, Rizin, APK/PE/binary workflows and an executable knowledge base. GPL-3.0.
+          - [ReverserID/JURIG](https://github.com/ReverserID/JURIG) — autonomous, Android-first reverse-engineering agent with native-binary tooling. **GitHub did not report a declared license at research time; check with the author before redistribution or reuse.**
+          - [lkimuk/ReArk](https://github.com/lkimuk/ReArk) — desktop AI-assisted inspection of Android/HarmonyOS packages and native PE/ELF/Mach-O binaries. Apache-2.0.
+          - [Sarks0/binary-mcp](https://github.com/Sarks0/binary-mcp) — MCP integrations for Ghidra, x64dbg, WinDbg and ILSpyCmd. Apache-2.0.
+          - [xjoker/delamain](https://github.com/xjoker/delamain) — headless JADX MCP for APK/DEX/AAB investigation. Apache-2.0.
+          - [asLody/dexdec](https://github.com/asLody/dexdec) — Android bytecode decompilation workbench with agent/MCP integration. Apache-2.0.
+          - [android-security-engineer/ApkToolSkills](https://github.com/android-security-engineer/ApkToolSkills) — AI-oriented APK analysis CLI and skills with structured JSON output. Apache-2.0; fork of Apktool.
+          - [android-security-engineer/dex2jar-skills](https://github.com/android-security-engineer/dex2jar-skills) — AI-oriented DEX/JAR analysis workflows and MCP integration. Apache-2.0; fork of dex2jar.
+          - [LaurieWired/GhidraMCP](https://github.com/LaurieWired/GhidraMCP) — MCP bridge for Ghidra. Apache-2.0.
+          - [mrexodia/ida-pro-mcp](https://github.com/mrexodia/ida-pro-mcp) — AI/MCP bridge for IDA Pro; requires a separately licensed IDA Pro installation. MIT.
+          - [cyberkaida/reverse-engineering-assistant](https://github.com/cyberkaida/reverse-engineering-assistant) — Ghidra-focused reverse-engineering MCP server. Apache-2.0.
+          - [jtsylve/re-mcp](https://github.com/jtsylve/re-mcp) — headless MCP bridge for IDA Pro and Ghidra. Apache-2.0.
+
+          ## Major source-level engines and specialist analyzers
+          - [NationalSecurityAgency/ghidra](https://github.com/NationalSecurityAgency/ghidra) — broad software reverse-engineering framework and decompiler. Apache-2.0; individual bundled components may have their own notices.
+          - [radareorg/radare2](https://github.com/radareorg/radare2) — portable, scriptable reverse-engineering and analysis toolkit. GitHub API returned no single SPDX license; preserve and read repository license notices.
+          - [rizinorg/rizin](https://github.com/rizinorg/rizin) — radare2-derived reverse-engineering framework. LGPL-3.0.
+          - [skylot/jadx](https://github.com/skylot/jadx) — Android DEX/APK decompiler. Apache-2.0.
+          - [iBotPeaches/Apktool](https://github.com/iBotPeaches/Apktool) — Android package decode/build tooling. Apache-2.0.
+          - [pxb1988/dex2jar](https://github.com/pxb1988/dex2jar) — DEX/JAR conversion and analysis tooling.
+          - [androguard/androguard](https://github.com/androguard/androguard) — Android app reverse engineering and programmatic analysis. Apache-2.0.
+          - [MobSF/Mobile-Security-Framework-MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) — automated mobile-app static/dynamic analysis and security assessment. GPL-3.0.
+          - [icsharpcode/ILSpy](https://github.com/icsharpcode/ILSpy) — cross-platform .NET decompiler. MIT.
+          - [frida/frida-core](https://github.com/frida/frida-core) and [frida/frida-tools](https://github.com/frida/frida-tools) — dynamic instrumentation core and CLI tooling; check their repository/component notices for licensing.
+          - [angr/angr](https://github.com/angr/angr) — program analysis, symbolic execution and binary reasoning. BSD-2-Clause.
+          - [avast/retdec](https://github.com/avast/retdec) — retargetable machine-code decompiler. MIT.
+
+          ## Important scope and safety notes
+          - This bundle contains source repositories, not prebuilt environments, paid tools, app samples or a ready-to-run reverse-engineering workstation.
+          - Tools may require platform-specific runtimes, Android SDKs, emulators/devices, Ghidra, IDA Pro, drivers or additional dependencies.
+          - Licensing varies by project and by bundled component. License statements above reflect repository metadata reviewed for this snapshot; preserve each source tree's LICENSE/NOTICE files and check them before reuse or redistribution.
+          - Forks that merely copy REA (including sgunin/ReverseEngineerAnything, teonett/Reverse-Engineer-Anything and illumi-ai/REA) are not duplicated as separate projects; the original is present once.
+          EOF
+          printf 'path\trepository\tlicense_metadata\tclone_status\n' > bundle/reports/clone-status.tsv
+
+      - name: Clone original REA with submodules
+        shell: bash
         run: |
-          find rea -name .git -prune -exec rm -rf {} +
-          zip -qr rea-completo.zip rea
-          unzip -t rea-completo.zip | tail -3
-          ls -lh rea-completo.zip
+          set -euo pipefail
+          git clone --depth 1 --recurse-submodules --shallow-submodules https://github.com/morluto/rea.git bundle/original/rea
+          git -C bundle/original/rea submodule status --recursive | tee bundle/reports/rea-submodules.txt
 
-      - name: Upload ZIP artifact
+      - name: Clone selected alternatives and engines
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          clone_project() {
+            local slug="$1"
+            local repo="$2"
+            local license="$3"
+            local dest="bundle/projects/$slug"
+            local log="/tmp/rea-ecosystem-logs/$slug.log"
+            local status="OK"
+
+            echo "::group::Clone $repo"
+            if git clone --depth 1 --recurse-submodules --shallow-submodules "https://github.com/$repo.git" "$dest" >"$log" 2>&1; then
+              status="OK (recursive clone)"
+            elif [[ -d "$dest/.git" ]]; then
+              if git -C "$dest" submodule update --init --recursive --depth 1 >>"$log" 2>&1; then
+                status="OK (submodules retried)"
+              else
+                status="PARTIAL (main repository present; one or more submodules failed)"
+              fi
+            else
+              rm -rf "$dest"
+              if git clone --depth 1 "https://github.com/$repo.git" "$dest" >"$log" 2>&1; then
+                if git -C "$dest" submodule update --init --recursive --depth 1 >>"$log" 2>&1; then
+                  status="OK (submodules retried)"
+                else
+                  status="PARTIAL (main repository present; one or more submodules failed)"
+                fi
+              else
+                status="FAILED (repository could not be cloned)"
+                mkdir -p bundle/reports/clone-logs
+                cp "$log" "bundle/reports/clone-logs/$slug.log" || true
+              fi
+            fi
+
+            printf '%s\t%s\t%s\t%s\n' "projects/$slug" "$repo" "$license" "$status" >> bundle/reports/clone-status.tsv
+            echo "$repo: $status"
+            echo "::endgroup::"
+          }
+
+          # AI agents and MCP bridges
+          clone_project open-reverselab LING71671/open-reverselab GPL-3.0
+          clone_project JURIG ReverserID/JURIG NOASSERTION
+          clone_project ReArk lkimuk/ReArk Apache-2.0
+          clone_project binary-mcp Sarks0/binary-mcp Apache-2.0
+          clone_project delamain xjoker/delamain Apache-2.0
+          clone_project dexdec asLody/dexdec Apache-2.0
+          clone_project ApkToolSkills android-security-engineer/ApkToolSkills Apache-2.0
+          clone_project dex2jar-skills android-security-engineer/dex2jar-skills Apache-2.0
+          clone_project GhidraMCP LaurieWired/GhidraMCP Apache-2.0
+          clone_project ida-pro-mcp mrexodia/ida-pro-mcp MIT
+          clone_project reverse-engineering-assistant cyberkaida/reverse-engineering-assistant Apache-2.0
+          clone_project re-mcp jtsylve/re-mcp Apache-2.0
+
+          # Core reverse-engineering and specialist analysis engines
+          clone_project ghidra NationalSecurityAgency/ghidra Apache-2.0
+          clone_project radare2 radareorg/radare2 NOASSERTION
+          clone_project rizin rizinorg/rizin LGPL-3.0
+          clone_project jadx skylot/jadx Apache-2.0
+          clone_project apktool iBotPeaches/Apktool Apache-2.0
+          clone_project dex2jar pxb1988/dex2jar CHECK-REPOSITORY-LICENSE
+          clone_project androguard androguard/androguard Apache-2.0
+          clone_project MobSF MobSF/Mobile-Security-Framework-MobSF GPL-3.0
+          clone_project ILSpy icsharpcode/ILSpy MIT
+          clone_project frida-core frida/frida-core NOASSERTION
+          clone_project frida-tools frida/frida-tools NOASSERTION
+          clone_project angr angr/angr BSD-2-Clause
+          clone_project retdec avast/retdec MIT
+
+      - name: Remove Git metadata and create ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          find bundle -name .git -prune -exec rm -rf {} +
+          zip -qr -1 rea-ecossistema-completo.zip bundle
+          unzip -t rea-ecossistema-completo.zip | tail -3
+          du -sh bundle rea-ecossistema-completo.zip
+          echo "=== Clone summary ==="
+          cat bundle/reports/clone-status.tsv
+          echo "=== Failed repositories, if any ==="
+          grep -F 'FAILED' bundle/reports/clone-status.tsv || true
+          echo "=== Partial repositories, if any ==="
+          grep -F 'PARTIAL' bundle/reports/clone-status.tsv || true
+
+      - name: Upload aggregate ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rea-completo
-          path: rea-completo.zip
+          name: rea-ecossistema-completo
+          path: rea-ecossistema-completo.zip
           if-no-files-found: error
           retention-days: 7
           compression-level: 0
