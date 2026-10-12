@@ -154,7 +154,16 @@ jobs:
           set -euo pipefail
           find bundle -name .git -prune -exec rm -rf {} +
           zip -qr -1 rea-ecossistema-completo.zip bundle
-          unzip -t rea-ecossistema-completo.zip | tail -3
+          python3 - <<'PY'
+          import zipfile
+
+          archive = "rea-ecossistema-completo.zip"
+          with zipfile.ZipFile(archive) as zf:
+              bad_member = zf.testzip()
+              if bad_member is not None:
+                  raise SystemExit(f"ZIP integrity test failed at: {bad_member}")
+              print(f"ZIP integrity OK: {len(zf.infolist())} entries checked")
+          PY
           du -sh bundle rea-ecossistema-completo.zip
           echo "=== Clone summary ==="
           cat bundle/reports/clone-status.tsv
